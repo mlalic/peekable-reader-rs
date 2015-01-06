@@ -119,6 +119,15 @@ mod tests {
         }
     }
 
+    /// Helper function which just checks whether the given IoResult is equal
+    /// to the given IoError.
+    fn is_err<T>(err: &IoError, res: IoResult<T>) -> bool {
+        match res {
+            Err(ref result_error) => result_error == err,
+            _ => false,
+        }
+    }
+
     /// Tests that it is possible to invoke the `peek` method multiple times
     /// with the same effect, when there are no intermediate reads.
     #[test]
@@ -133,6 +142,23 @@ mod tests {
         assert_eq!(b, reader.peek().unwrap());
     }
 
+    /// Tests that the `peek` method correctly returns an IoError returned by
+    /// the underlying reader on consecutive peek calls.
+    #[test]
+    fn peek_result_error() {
+        let err = IoError {
+            kind: IoErrorKind::OtherIoError,
+            desc: "Dummy error",
+            detail: None,
+        };
+        let mut reader = PeekableReader::new(
+            MockReaderWithError::new(err.clone(), 0));
+
+        assert!(is_err(&err, reader.peek()),
+                "Expected an IoError!");
+        assert!(is_err(&err, reader.peek()),
+                "Expected an IoError on the second peek too!");
+    }
     #[test]
     fn single_byte_reader_peek() {
         let b = 5u8;
