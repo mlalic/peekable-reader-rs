@@ -31,9 +31,82 @@ impl<R: Reader> PeekableReader<R> {
     }
 }
 
+impl<R: Reader> Reader for PeekableReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+        if buf.len() == 0 {
+            return Ok(0);
+        }
+
+        // First, put the byte that was read off the underlying reader in a
+        // (possible) previous peek operation (if such a byte is indeed cached)
+        let offset = match self.peeked_result.clone() {
+            Some(Err(e)) => {
+                self.peeked_result = None;
+                return Err(e);
+            },
+            Some(Ok(b)) => {
+                buf[0] = b;
+                self.peeked_result = None;
+                1
+            },
+            None => 0,
+        };
+
+        if offset == 1 && buf.len() == 1 {
+            // We've filled the buffer by using the previously peeked byte
+            Ok(1)
+        } else {
+            // We are still missing more bytes, so we read them from the
+            // underlying reader and place them directly in the correct place
+            // in the buffer.
+            let (_, leftover) = buf.split_at_mut(offset);
+            Ok(try!(self.inner.read(leftover)) + offset)
+        }
+    }
+}
+
 mod tests {
     use super::PeekableReader;
     use std::io::{MemReader, IoError, IoErrorKind, IoResult};
+
+    /// A mock implementation of the `Reader` trait that returns a given
+    /// IoError after a certain number of bytes has been read. The error is
+    /// returned only once, with subsequent read calls completing successfully
+    /// again.
+    /// When the Reader successfully reads a byte, it is always `0u8`.
+    struct MockReaderWithError {
+        error: IoError,
+        after: uint,
+        bytes_read: uint,
+        errored: bool,
+    }
+
+    impl MockReaderWithError {
+        fn new(error: IoError, after: uint) -> MockReaderWithError {
+            MockReaderWithError {
+                error: error,
+                after: after,
+                bytes_read: 0,
+                errored: false,
+            }
+        }
+    }
+
+    impl Reader for MockReaderWithError {
+        fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+            self.bytes_read += buf.len();
+            if self.bytes_read <= self.after || self.errored {
+                for b in buf.iter_mut() {
+                    *b = 0;
+                }
+
+                Ok(buf.len())
+            } else {
+                self.errored = true;
+                Err(self.error.clone())
+            }
+        }
+    }
 
     /// Helper function which checks whether the given result indicated EOF.
     fn is_eof<T>(res: IoResult<T>) -> bool {
@@ -76,4 +149,40 @@ mod tests {
         // Must return EOF since the underlying reader is empty
         assert!(is_eof(reader.peek()));
     }
+
+    /// Test for the MockReaderWithError helper mock class...
+    #[test]
+    fn mock_sanity_check() {
+        {
+            let err = IoError {
+                kind: IoErrorKind::OtherIoError,
+                desc: "Dummy error",
+                detail: None,
+            };
+            let mut reader = MockReaderWithError::new(err.clone(), 1);
+
+            // First byte is not a problem.
+            assert_eq!(0, reader.read_byte().unwrap());
+            // However, now the read fails...
+            assert!(is_err(&err, reader.read_byte()),
+                    "Expected an IoError on the read byte");
+            // But, already on the next one, we're out of the woods.
+            assert_eq!(0, reader.read_byte().unwrap());
+        }
+        {
+            let err = IoError {
+                kind: IoErrorKind::OtherIoError,
+                desc: "Dummy error",
+                detail: None,
+            };
+            let mut reader = MockReaderWithError::new(err.clone(), 0);
+
+            // The read fails on the first one...
+            assert!(is_err(&err, reader.read_byte()),
+                    "Expected an IoError on the read byte");
+            // ...but now we're good.
+            assert_eq!(0, reader.read_byte().unwrap());
+        }
+    }
+
 }
