@@ -1,5 +1,17 @@
 use std::io::IoResult;
 
+/// A wrapper around any struct implementing the `Reader` trait, additionally
+/// allowing for `peek` operations to be performed. Therefore, the
+/// `PeekableReader` struct also implements the `Reader` trait.
+///
+/// The primary invariant of the `PeekableReader` is that after calling the
+/// `peek` method, the next `read_byte` call will return the same result as
+/// the `peek` does. When the result is a byte (read off the wrapped reader),
+/// any read-type method of the `Reader` trait will include the byte as the
+/// first one. On the other hand, if the result is an `IoError`, the error
+/// will be returned regardless of which read-type method of the `Reader` is
+/// invoked. Consecutive `peek`s before any read-type operation is used
+/// always return the same `IoResult`.
 pub struct PeekableReader<R> {
     inner: R,
     peeked_result: Option<IoResult<u8>>,
@@ -15,6 +27,11 @@ impl<R: Reader> PeekableReader<R> {
         }
     }
 
+    /// Returns the `IoResult` which the Reader will return on the next
+    /// `get_byte` call.
+    ///
+    /// If the `IoResult` is indeed an `IoError`, the error will be returned
+    /// for any subsequent read operation invoked upon the `Reader`.
     pub fn peek(&mut self) -> IoResult<u8> {
         // Return either the currently cached peeked byte or obtain a new one
         // from the underlying reader.
@@ -159,6 +176,24 @@ mod tests {
         assert!(is_err(&err, reader.peek()),
                 "Expected an IoError on the second peek too!");
     }
+
+    /// Tests that performing multiple `peek` calls after the `Reader` has
+    /// reached EOF always returns EOF.
+    #[test]
+    fn multiple_peeks_at_eof() {
+        let mut reader = PeekableReader::new(MemReader::new(vec!(1)));
+        // Read/skip the first byte
+        let _ = reader.read_byte();
+        // Consume the EOF (and perform a sanity check that we have reached it)
+        assert!(is_eof(reader.read_byte()));
+
+        // All subsequent peeks return EOF
+        assert!(is_eof(reader.peek()));
+        assert!(is_eof(reader.peek()));
+    }
+
+    /// Tests that peeks and reads correctly work when the underlying reader
+    /// only has a single byte.
     #[test]
     fn single_byte_reader_peek() {
         let b = 5u8;
@@ -166,14 +201,110 @@ mod tests {
 
         // When we peek, we get the correct byte back?
         assert_eq!(b, reader.peek().unwrap());
+        // And now we also read it...
+        assert_eq!(b, reader.read_byte().unwrap());
+        // After this, both the peek and the read return an EOF?
+        assert!(is_eof(reader.peek()));
+        assert!(is_eof(reader.read_byte()));
     }
 
+    /// Tests that peeks and reads from an empty underlying reader instantly
+    /// return EOF.
     #[test]
     fn empty_underlying_reader() {
         let mut reader = PeekableReader::new(MemReader::new(vec!()));
 
         // Must return EOF since the underlying reader is empty
         assert!(is_eof(reader.peek()));
+        assert!(is_eof(reader.read_byte()));
+    }
+
+    /// Tests that when we peek before every read, we correctly end up reading
+    /// the entire contents of the underlying Reader.
+    #[test]
+    fn peek_read_alternate() {
+        let vec: Vec<u8> = range(0u8, 5).collect();
+        let mut reader = PeekableReader::new(MemReader::new(vec.clone()));
+
+        for &b in vec.iter() {
+            assert_eq!(b, reader.peek().unwrap());
+            assert_eq!(b, reader.read_byte().unwrap());
+        }
+        // Now we're at EOF
+        assert!(is_eof(reader.peek()));
+        assert!(is_eof(reader.read_byte()));
+    }
+
+    /// Tests that a peek after the underlying reader has reached EOF fails
+    /// with an appropriate error.
+    #[test]
+    fn peek_after_eof() {
+        let mut reader = PeekableReader::new(MemReader::new(vec!(1)));
+        // Read both the only byte from the reader and the EOF
+        let _ = reader.read_byte();
+        assert!(is_eof(reader.read_byte()));
+
+        // Now the peek still correctly returns the EOF
+        assert!(is_eof(reader.peek()));
+    }
+
+    /// Tests that the PeekableReader behaves correctly when only Reader methods
+    /// are used.
+    #[test]
+    fn sequential_reader() {
+        let vec: Vec<u8> = range(0u8, 5).collect();
+        let mut reader = PeekableReader::new(MemReader::new(vec.clone()));
+
+        for &b in vec.iter() {
+            assert_eq!(b, reader.read_byte().unwrap());
+        }
+        // Now we're at EOF
+        assert!(is_eof(reader.read_byte()));
+        // Still EOF...
+        assert!(is_eof(reader.read_byte()));
+    }
+
+    /// Tests that a currently cached peeked byte does not get invalidated when
+    /// the read method is invoked with an empty buffer.
+    #[test]
+    fn zero_length_buffer_read_does_not_invalidate_peek() {
+        let vec: Vec<u8> = range(0u8, 5).collect();
+        let mut reader = PeekableReader::new(MemReader::new(vec.clone()));
+        let first_peek = reader.peek().unwrap();
+
+        let mut buffer = vec!();
+        let _ = reader.read(buffer.as_mut_slice());
+
+        assert_eq!(first_peek, reader.peek().unwrap());
+    }
+
+    /// Tests that when the underlying `Reader` returns an IoError, the `peek`
+    /// method keeps returning the same error for each call until the error is
+    /// actually "read" by the client (by invoking one of the read methods of
+    /// the `Reader`).
+    #[test]
+    fn always_returns_same_io_error_on_peek() {
+        let err = IoError {
+            kind: IoErrorKind::OtherIoError,
+            desc: "Dummy error",
+            detail: None,
+        };
+        let mut reader = PeekableReader::new(
+            MockReaderWithError::new(err.clone(), 1));
+        // Read the first byte (no error)
+        assert_eq!(0, reader.read_byte().unwrap());
+
+        // This peek now signals an IoError
+        assert!(is_err(&err, reader.peek()),
+                "Expected an IoError on the first peek");
+        // The next peek still reports the same error...
+        assert!(is_err(&err, reader.peek()),
+                "Expected an IoError on the second peek too");
+        // The read also indicates the same error.
+        assert!(is_err(&err, reader.read_byte()),
+                "Expected an IoError on the read too");
+        // The next peek has to retry the read -- which succeeds
+        assert_eq!(0, reader.peek().unwrap());
     }
 
     /// Test for the MockReaderWithError helper mock class...
