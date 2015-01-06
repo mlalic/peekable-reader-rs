@@ -82,6 +82,7 @@ impl<R: Reader> Reader for PeekableReader<R> {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::PeekableReader;
     use std::io::{MemReader, IoError, IoErrorKind, IoResult};
