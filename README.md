@@ -1,4 +1,7 @@
 # peekable-reader-rs
+
+[![Build Status](https://travis-ci.org/mlalic/peekable-reader-rs.svg?branch=master)](https://travis-ci.org/mlalic/peekable-reader-rs)
+
 A utility struct for Rust: a wrapper around any `Reader`, which allows for performing `peek` operations, along with the usual `Reader` methods.
 
 # Usage
