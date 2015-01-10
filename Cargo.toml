@@ -3,3 +3,12 @@
 name = "peekable_reader"
 version = "0.0.1"
 authors = ["Marko Lalic <marko.lalic@gmail.com>"]
+
+description = "Exposes a utility wrapper around Readers, allowing the clients to peek at the coming byte, without consuming it"
+
+repository = "https://github.com/mlalic/peekable-reader-rs"
+
+readme = "README.md"
+
+license = "MIT"
+keywords = ["reader", "peek", "wrapper"]
