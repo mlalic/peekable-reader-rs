@@ -76,8 +76,7 @@ impl<R: Reader> Reader for PeekableReader<R> {
             // We are still missing more bytes, so we read them from the
             // underlying reader and place them directly in the correct place
             // in the buffer.
-            let (_, leftover) = buf.split_at_mut(offset);
-            Ok(try!(self.inner.read(leftover)) + offset)
+            Ok(try!(self.inner.read(&mut buf[offset..])) + offset)
         }
     }
 }
