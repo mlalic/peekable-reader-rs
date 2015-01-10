@@ -49,7 +49,7 @@ impl<R: Reader> PeekableReader<R> {
 }
 
 impl<R: Reader> Reader for PeekableReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         if buf.len() == 0 {
             return Ok(0);
         }
@@ -94,13 +94,13 @@ mod tests {
     /// When the Reader successfully reads a byte, it is always `0u8`.
     struct MockReaderWithError {
         error: IoError,
-        after: uint,
-        bytes_read: uint,
+        after: usize,
+        bytes_read: usize,
         errored: bool,
     }
 
     impl MockReaderWithError {
-        fn new(error: IoError, after: uint) -> MockReaderWithError {
+        fn new(error: IoError, after: usize) -> MockReaderWithError {
             MockReaderWithError {
                 error: error,
                 after: after,
@@ -111,7 +111,7 @@ mod tests {
     }
 
     impl Reader for MockReaderWithError {
-        fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+        fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
             self.bytes_read += buf.len();
             if self.bytes_read <= self.after || self.errored {
                 for b in buf.iter_mut() {
