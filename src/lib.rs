@@ -224,7 +224,7 @@ mod tests {
     /// the entire contents of the underlying Reader.
     #[test]
     fn peek_read_alternate() {
-        let vec: Vec<u8> = range(0u8, 5).collect();
+        let vec: Vec<u8> = (0u8..5).collect();
         let mut reader = PeekableReader::new(MemReader::new(vec.clone()));
 
         for &b in vec.iter() {
@@ -253,7 +253,7 @@ mod tests {
     /// are used.
     #[test]
     fn sequential_reader() {
-        let vec: Vec<u8> = range(0u8, 5).collect();
+        let vec: Vec<u8> = (0u8..5).collect();
         let mut reader = PeekableReader::new(MemReader::new(vec.clone()));
 
         for &b in vec.iter() {
@@ -269,7 +269,7 @@ mod tests {
     /// the read method is invoked with an empty buffer.
     #[test]
     fn zero_length_buffer_read_does_not_invalidate_peek() {
-        let vec: Vec<u8> = range(0u8, 5).collect();
+        let vec: Vec<u8> = (0u8..5).collect();
         let mut reader = PeekableReader::new(MemReader::new(vec.clone()));
         let first_peek = reader.peek_byte().unwrap();
 
