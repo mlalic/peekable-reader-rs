@@ -1,4 +1,4 @@
-use std::io::IoResult;
+use std::old_io::IoResult;
 
 /// A wrapper around any struct implementing the `Reader` trait, additionally
 /// allowing for `peek` operations to be performed. Therefore, the
@@ -84,7 +84,7 @@ impl<R: Reader> Reader for PeekableReader<R> {
 #[cfg(test)]
 mod tests {
     use super::PeekableReader;
-    use std::io::{MemReader, IoError, IoErrorKind, IoResult};
+    use std::old_io::{MemReader, IoError, IoErrorKind, IoResult};
 
     /// A mock implementation of the `Reader` trait that returns a given
     /// IoError after a certain number of bytes has been read. The error is
